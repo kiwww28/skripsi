@@ -3,21 +3,15 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProductResource\Pages;
-use App\Filament\Resources\ProductResource\RelationManagers;
 use App\Models\Kategori;
 use App\Models\Product;
-use App\Models\Transaksi;
 use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Illuminate\Support\Facades\DB;
 
 class ProductResource extends Resource
 {
@@ -36,59 +30,31 @@ class ProductResource extends Resource
                     ->label('Kategori')
                     ->options(Kategori::pluck('nama', 'id')) // langsung ambil semua
                     ->searchable()
-                    ->required()
+                    ->required(),
             ]);
     }
 
     public static function table(Table $table): Table
     {
-        $bulanIni = now()->month;
-        $tahunIni = now()->year;
-        $bulanLalu = now()->subMonth()->month;
-        $tahunLalu = now()->subMonth()->year;
-
-        // 🔹 Jumlah unit terjual per produk bulan ini
-        $terjualBulanIni = Transaksi::select('product_id', DB::raw('SUM(jumlah) as total_jumlah'))
-            ->whereMonth('created_at', $bulanIni)
-            ->whereYear('created_at', $tahunIni)
-            ->groupBy('product_id')
-            ->pluck('total_jumlah', 'product_id');
-
-        // 🔹 Jumlah unit terjual per produk bulan lalu
-        $terjualBulanLalu = Transaksi::select('product_id', DB::raw('SUM(jumlah) as total_jumlah'))
-            ->whereMonth('created_at', $bulanLalu)
-            ->whereYear('created_at', $tahunLalu)
-            ->groupBy('product_id')
-            ->pluck('total_jumlah', 'product_id');
-
-        // 🔹 Total semua unit terjual bulan ini
-        $totalUnitBulanIni = $terjualBulanIni->sum();
-
-        // 🔹 Threshold: produk dengan kontribusi ≥5% total penjualan dianggap “laris”
-        $threshold = $totalUnitBulanIni * 0.05;
-
-        // 🔹 Produk laris = penjualan naik & signifikan
-        $produkLaris = collect($terjualBulanIni)
-            ->filter(function ($jumlah, $productId) use ($terjualBulanLalu, $threshold) {
-                $jumlahLalu = $terjualBulanLalu[$productId] ?? 0;
-                return $jumlah > $jumlahLalu && $jumlah >= $threshold;
-            })
-            ->keys()
-            ->toArray();
-
         return $table
             ->columns([
                 TextColumn::make('nama')
                     ->label('Nama Produk')
-                    ->color(function ($record) use ($produkLaris) {
+                    ->color(function ($record) {
                         $stokTipis = $record->stok < 20;
-                        $laris = in_array($record->id, $produkLaris);
+                        $laris = $record->isTrending(); // 🔥 tinggal panggil dari model
 
                         if ($stokTipis && $laris) {
-                            return 'warning'; // 🟡 stok tipis tapi laku keras
-                        }
+                            return 'warning';
+                        } // 🟡 stok tipis tapi laku keras
+                        if ($laris) {
+                            return 'success';
+                        }                // 🟢 laku tapi stok aman
+                        if ($stokTipis) {
+                            return 'default';
+                        }             // 🔴 stok tipis tapi gak laku
 
-                        return null; // ⚪ default putih
+                        return null;
                     }),
                 TextColumn::make('stok'),
                 TextColumn::make('harga')->money('IDR', locale: 'id'),
@@ -105,8 +71,6 @@ class ProductResource extends Resource
                 ]),
             ]);
     }
-
-
 
     public static function getRelations(): array
     {
