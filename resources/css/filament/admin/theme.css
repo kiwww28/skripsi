@@ -1,0 +1,11 @@
+@import "/vendor/filament/filament/resources/css/theme.css";
+
+@config 'tailwind.config.js';
+
+/* Example: Changing the main background */
+.fi-body {
+    /* Using a Tailwind CSS utility class */
+    @apply bg-zinc-200 dark:bg-zinc-900 !important;
+    /* Or standard CSS */
+    /* background-color: #e5e7eb !important; */
+}
